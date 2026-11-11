@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Taaban - Schlummer den Wecker!</title>
+    <!-- Tailwind CSS for UI overlays -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for crisp icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Sniglet:wght@400;800&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Sniglet', cursive;
+            background-color: #1a1a2e;
+            color: #ffffff;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .font-title {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 1024px;
+            height: 100vh;
+            max-height: 768px;
+            background: #222034;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #1f1a3a;
+        }
+
+        /* Pulsing & shaking keyframes for ringing alarms */
+        @keyframes alarm-shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            20% { transform: translate(-3px, 2px) rotate(-8deg); }
+            40% { transform: translate(3px, -2px) rotate(8deg); }
+            60% { transform: translate(-3px, -2px) rotate(-6deg); }
+            80% { transform: translate(3px, 2px) rotate(6deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+
+        .custom-btn {
+            background: linear-gradient(135deg, #ff4b5c, #ff2e63);
+            border: 4px solid #ffffff;
+            box-shadow: 0 6px 0 #990026, 0 10px 15px rgba(0,0,0,0.4);
+            transition: all 0.1s ease;
+        }
+
+        .custom-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0 #990026, 0 12px 18px rgba(0,0,0,0.4);
+        }
+
+        .custom-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #990026, 0 4px 6px rgba(0,0,0,0.4);
+        }
+
+        .btn-green {
+            background: linear-gradient(135deg, #00b894, #00bec4);
+            box-shadow: 0 6px 0 #006266, 0 10px 15px rgba(0,0,0,0.4);
+        }
+        .btn-green:hover {
+            box-shadow: 0 8px 0 #006266, 0 12px 18px rgba(0,0,0,0.4);
+        }
+        .btn-green:active {
+            box-shadow: 0 2px 0 #006266, 0 4px 6px rgba(0,0,0,0.4);
+        }
+
+        /* Modal Overlay Animations */
+        .fade-in {
+            animation: fadeIn 0.3s forwards ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container" class="rounded-none sm:rounded-2xl border-0 sm:border-4 border-slate-700">
+        <!-- Canvas for Game World (Bed, Bedroom, Alarms) -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- HUD Layer (Top Status Bar) -->
+        <div id="hud" class="hidden absolute top-0 left-0 w-full p-4 flex justify-between items-center pointer-events-none z-10">
+            <!-- Level & Score -->
+            <div class="flex gap-3 items-center">
+                <div class="bg-slate-900/80 backdrop-blur border-2 border-slate-600 px-4 py-2 rounded-xl text-white font-title text-lg flex items-center gap-2 shadow-lg">
+                    <span class="text-yellow-400"><i class="fa-solid fa-trophy"></i></span>
+                    <span id="hud-level">Level 1</span>
+                </div>
+                <div class="bg-slate-900/80 backdrop-blur border-2 border-slate-600 px-4 py-2 rounded-xl text-white font-title text-lg flex items-center gap-2 shadow-lg">
+                    <span class="text-red-400"><i class="fa-solid fa-bell"></i></span>
+                    <span id="hud-alarms">0 / 3</span>
+                </div>
+            </div>
+
+            <!-- Mute Audio Toggle Button -->
+            <button id="mute-btn" class="pointer-events-auto bg-slate-800/80 hover:bg-slate-700 border-2 border-slate-600 text-white w-12 h-12 rounded-xl flex items-center justify-center text-xl transition shadow-lg active:scale-95">
+                <i id="mute-icon" class="fa-solid fa-volume-high"></i>
+            </button>
+        </div>
+
+        <!-- Timer Bar (Bottom HUD) -->
+        <div id="timer-container" class="hidden absolute bottom-4 left-1/2 transform -translate-x-1/2 w-11/12 max-w-md bg-slate-900/80 border-2 border-slate-600 p-2 rounded-2xl shadow-xl z-10 flex flex-col items-center">
+            <div class="w-full flex justify-between text-xs font-title text-slate-300 px-2 mb-1">
+                <span><i class="fa-regular fa-clock mr-1"></i> ZEIT</span>
+                <span id="timer-text" class="text-yellow-400 font-bold text-sm">10.0s</span>
+            </div>
+            <div class="w-full bg-slate-800 h-5 rounded-xl overflow-hidden border border-slate-700 p-0.5">
+                <div id="timer-bar" class="bg-gradient-to-r from-green-500 via-yellow-400 to-red-500 h-full rounded-lg transition-all duration-75 w-full"></div>
+            </div>
+        </div>
+
+        <!-- START MENU OVERLAY -->
+        <div id="menu-overlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col justify-center items-center p-6 z-20 text-center">
+            <div class="fade-in max-w-md w-full flex flex-col items-center">
+                <!-- Title Logo -->
+                <div class="relative mb-6">
+                    <h1 class="text-6xl sm:text-7xl font-title text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-300 to-pink-500 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] tracking-wider">
+                        TAABAN
+                    </h1>
+                    <span class="absolute -top-3 -right-6 text-red-500 text-3xl animate-bounce"><i class="fa-solid fa-bell"></i></span>
+                </div>
+                
+                <p class="text-slate-300 text-lg sm:text-xl font-medium mb-6 leading-relaxed">
+                    Der müde Mann will ausschlafen! Turn off all the ringing alarm clocks before the timer runs out.
+                </p>
+
+                <!-- Instructions Card -->
+                <div class="bg-slate-900/90 border border-slate-700 p-4 rounded-xl mb-8 text-left w-full shadow-inner text-slate-300 text-sm space-y-2">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-hand-pointer text-yellow-400 text-lg w-6 text-center"></i>
+                        <span>Click or tap ringing clocks to smash them!</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-hourglass-half text-red-400 text-lg w-6 text-center"></i>
+                        <span>Be fast! Levels get harder with moving clocks.</span>
+                    </div>
+                </div>
+
+                <!-- Play Button -->
+                <button id="start-btn" class="custom-btn text-white text-2xl font-title px-10 py-4 rounded-2xl w-full flex items-center justify-center gap-3 cursor-pointer">
+                    <i class="fa-solid fa-play"></i> SPIELEN
+                </button>
+            </div>
+        </div>
+
+        <!-- LEVEL COMPLETE OVERLAY -->
+        <div id="victory-overlay" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col justify-center items-center p-6 z-20 text-center">
+            <div class="fade-in max-w-md w-full flex flex-col items-center">
+                <div class="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-4xl mb-4 border-2 border-emerald-500/50">
+                    <i class="fa-solid fa-moon"></i>
+                </div>
+                <h2 class="text-4xl font-title text-emerald-400 mb-2">RUHE UND FRIEDEN!</h2>
+                <p id="victory-msg" class="text-slate-300 text-lg mb-6">Alle Wecker wurden stummgeschaltet. Zzz...</p>
+
+                <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full mb-6 flex justify-around">
+                    <div>
+                        <div class="text-xs text-slate-400 uppercase font-title">Level</div>
+                        <div id="vic-level-num" class="text-2xl font-title text-yellow-400">1</div>
+                    </div>
+                    <div class="border-r border-slate-800"></div>
+                    <div>
+                        <div class="text-xs text-slate-400 uppercase font-title">Restzeit</div>
+                        <div id="vic-time-bonus" class="text-2xl font-title text-emerald-400">4.2s</div>
+                    </div>
+                </div>
+
+                <button id="next-level-btn" class="custom-btn btn-green text-white text-xl font-title px-8 py-3.5 rounded-2xl w-full flex items-center justify-center gap-2 cursor-pointer">
+                    NÄCHSTES LEVEL <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- GAME OVER OVERLAY -->
+        <div id="gameover-overlay" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col justify-center items-center p-6 z-20 text-center">
+            <div class="fade-in max-w-md w-full flex flex-col items-center">
+                <div class="w-20 h-20 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center text-4xl mb-4 border-2 border-red-500/50">
+                    <i class="fa-solid fa-volume-xmark"></i>
+                </div>
+                <h2 class="text-4xl font-title text-red-500 mb-2">ZU LAUT!</h2>
+                <p class="text-slate-300 text-lg mb-6">Der Mann ist aufgewacht und hat schlechte Laune!</p>
+
+                <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full mb-6">
+                    <div class="text-xs text-slate-400 uppercase font-title">Erreichtes Level</div>
+                    <div id="go-level-num" class="text-3xl font-title text-yellow-400">Level 3</div>
+                </div>
+
+                <button id="restart-btn" class="custom-btn text-white text-xl font-title px-8 py-3.5 rounded-2xl w-full flex items-center justify-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-rotate-right"></i> NOCHMAL VERSUCHEN
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Logic & Sound Generator -->
+    <script>
+        // --- WEB AUDIO API SOUND SYSTEM ---
+        class SoundSystem {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+                this.alarmOsc = null;
+                this.alarmGain = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playClick() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            startAlarmSound() {
+                if (this.muted || !this.ctx || this.alarmOsc) return;
+                try {
+                    this.alarmOsc = this.ctx.createOscillator();
+                    this.alarmGain = this.ctx.createGain();
+
+                    this.alarmOsc.type = 'square';
+                    // Alternate frequencies for classic alarm sound
+                    const now = this.ctx.currentTime;
+                    this.alarmOsc.frequency.setValueAtTime(800, now);
+                    
+                    // LFO for ringing effect
+                    const lfo = this.ctx.createOscillator();
+                    lfo.frequency.value = 12; // 12Hz ring speed
+                    const lfoGain = this.ctx.createGain();
+                    lfoGain.gain.value = 300;
+                    lfo.connect(this.alarmOsc.frequency);
+                    lfo.start();
+
+                    this.alarmGain.gain.setValueAtTime(0.08, now);
+
+                    this.alarmOsc.connect(this.alarmGain);
+                    this.alarmGain.connect(this.ctx.destination);
+                    this.alarmOsc.start();
+                } catch(e) {}
+            }
+
+            stopAlarmSound() {
+                if (this.alarmOsc) {
+                    try {
+                        this.alarmOsc.stop();
+                        this.alarmOsc.disconnect();
+                    } catch(e){}
+                    this.alarmOsc = null;
+                }
+            }
+
+            playVictory() {
+                if (this.muted || !this.ctx) return;
+                const notes = [440, 554.37, 659.25, 880]; // A major arpeggio
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.1 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.1);
+                    osc.stop(this.ctx.currentTime + idx * 0.1 + 0.3);
+                });
+            }
+
+            playGameOver() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.6);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.6);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.6);
+            }
+        }
+
+        const sounds = new SoundSystem();
+
+        // --- GAME ENGINE & STATE ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = 'MENU'; // 'MENU', 'PLAYING', 'VICTORY', 'GAMEOVER'
+        let currentLevel = 1;
+        let timeRemaining = 10;
+        let maxLevelTime = 10;
+        let lastFrameTime = 0;
+        let alarmsToSilence = 0;
+        let alarmsSilenced = 0;
+        let alarmsList = [];
+        let particles = [];
+            zzzParticles = [];
+
+        // Dynamic Level Configurations
+        function getLevelConfig(lvl) {
+            const count = Math.min(3 + (lvl - 1) * 2, 12); // Increases count
+            const time = Math.max(10 - (lvl - 1) * 0.6, 4.5); // Tighter time
+            const isMoving = lvl >= 3; // Moving clocks from lvl 3
+            const speed = isMoving ? Math.min(1 + (lvl - 3) * 0.5, 3.5) : 0;
+            return { count, time, isMoving, speed };
+        }
+
+        // Resizing logic
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- ALARM CLOCK CLASS ---
+        class AlarmClock {
+            constructor(x, y, radius, vx, vy) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.vx = vx;
+                this.vy = vy;
+                this.ringing = true;
+                this.ringAngle = 0;
+                this.color = ['#ff4757', '#ffa502', '#2ed573', '#1e90ff', '#e84393'][Math.floor(Math.random() * 5)];
+                this.ringTimer = Math.random() * 100;
+            }
+
+            update(width, height) {
+                if (!this.ringing) return;
+
+                // Move if moving clock
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce off room boundaries (keep inside play area)
+                const marginHorizontal = width * 0.08;
+                const marginTop = height * 0.15;
+                const marginBottom = height * 0.15;
+
+                if (this.x - this.radius < marginHorizontal || this.x + this.radius > width - marginHorizontal) {
+                    this.vx *= -1;
+                    this.x = Math.max(marginHorizontal + this.radius, Math.min(width - marginHorizontal - this.radius, this.x));
+                }
+                if (this.y - this.radius < marginTop || this.y + this.radius > height - marginBottom) {
+                    this.vy *= -1;
+                    this.y = Math.max(marginTop + this.radius, Math.min(height - marginBottom - this.radius, this.y));
+                }
+
+                // Vibration shaking angle
+                this.ringTimer += 0.3;
+                this.ringAngle = Math.sin(this.ringTimer * 10) * 0.15;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.ringAngle);
+
+                // Sound wave effect if ringing
+                if (this.ringing) {
+                    ctx.strokeStyle = 'rgba(255, 230, 0, 0.6)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius + 8 + Math.sin(this.ringTimer * 5) * 4, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Bells on top
+                ctx.fillStyle = '#f1c40f';
+                // Left Bell
+                ctx.beginPath();
+                ctx.arc(-this.radius * 0.6, -this.radius * 0.7, this.radius * 0.35, 0, Math.PI * 2);
+                ctx.fill();
+                // Right Bell
+                ctx.beginPath();
+                ctx.arc(this.radius * 0.6, -this.radius * 0.7, this.radius * 0.35, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Feet
+                ctx.strokeStyle = '#7f8c8d';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(-this.radius * 0.5, this.radius * 0.6);
+                ctx.lineTo(-this.radius * 0.8, this.radius * 0.9);
+                ctx.moveTo(this.radius * 0.5, this.radius * 0.6);
+                ctx.lineTo(this.radius * 0.8, this.radius * 0.9);
+                ctx.stroke();
+
+                // Body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // Clock Face
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius * 0.72, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Clock Hands
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                // Hour hand
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -this.radius * 0.35);
+                ctx.stroke();
+                // Minute hand
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(this.radius * 0.45, 0);
+                ctx.stroke();
+
+                // Center pin
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            isClicked(px, py) {
+                const dist = Math.hypot(px - this.x, py - this.y);
+                return dist <= this.radius + 10; // slightly lenient tap target
+            }
+        }
+
+        // --- PARTICLES & VISUAL EFFECTS ---
+        function createSparks(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 4;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 3 + Math.random() * 3,
+                    color: color,
+                    alpha: 1,
+                    life: 0.04
+                });
+            }
+        }
+
+        function createZzz(x, y) {
+            if (Math.random() < 0.03) {
+                zzzParticles.push({
+                    x: x + (Math.random() * 20 - 10),
+                    y: y,
+                    vy: -0.8 - Math.random() * 0.5,
+                    vx: Math.sin(Date.now() * 0.003) * 0.3,
+                    size: 14 + Math.random() * 10,
+                    alpha: 1
+                });
+            }
+        }
+
+        // --- DRAW ROOM & CHARACTERS (ENHANCED COZY BEDROOM) ---
+        function drawBedroom() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. Wall Background (Cozy Dark Blue-Purple Gradient)
+            const wallGradient = ctx.createLinearGradient(0, 0, 0, h * 0.68);
+            wallGradient.addColorStop(0, '#151326');
+            wallGradient.addColorStop(1, '#251f3d');
+            ctx.fillStyle = wallGradient;
+            ctx.fillRect(0, 0, w, h * 0.68);
+
+            // Subtle Wall Pattern (Stripes)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+            for (let x = 0; x < w; x += 35) {
+                ctx.fillRect(x, 0, 18, h * 0.68);
+            }
+
+            // 2. Window with Night Sky & Moon
+            const winW = Math.min(w * 0.22, 160);
+            const winH = Math.min(h * 0.3, 180);
+            const winX = w * 0.08;
+            const winY = h * 0.12;
+
+            // Outer Window Frame
+            ctx.fillStyle = '#1e1b2e';
+            ctx.beginPath();
+            ctx.roundRect(winX - 6, winY - 6, winW + 12, winH + 12, 8);
+            ctx.fill();
+
+            // Sky inside window
+            const skyGrad = ctx.createLinearGradient(winX, winY, winX, winY + winH);
+            skyGrad.addColorStop(0, '#090a14');
+            skyGrad.addColorStop(1, '#1b1d36');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(winX, winY, winW, winH);
+
+            // Moon inside Window
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowColor = 'rgba(254, 240, 138, 0.5)';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(winX + winW * 0.7, winY + winH * 0.3, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Stars
+            ctx.fillStyle = '#ffffff';
+            const starCoords = [[0.2, 0.2], [0.4, 0.15], [0.3, 0.5], [0.8, 0.6], [0.6, 0.8]];
+            starCoords.forEach(([sx, sy]) => {
+                ctx.fillRect(winX + winW * sx, winY + winH * sy, 2, 2);
+            });
+
+            // Window Pane Grids
+            ctx.strokeStyle = '#2d2847';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(winX + winW / 2, winY);
+            ctx.lineTo(winX + winW / 2, winY + winH);
+            ctx.moveTo(winX, winY + winH / 2);
+            ctx.lineTo(winX + winW, winY + winH / 2);
+            ctx.stroke();
+
+            // Window Sill
+            ctx.fillStyle = '#3f3659';
+            ctx.fillRect(winX - 10, winY + winH, winW + 20, 10);
+
+            // Small Plant on Window Sill
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(winX + 25, winY + winH - 8, 8, 0, Math.PI * 2);
+            ctx.arc(winX + 33, winY + winH - 12, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#a855f7';
+            ctx.fillRect(winX + 22, winY + winH - 6, 16, 12); // Pot
+
+            // 3. Wall Art Frames (Right Side)
+            const frameX = w * 0.82;
+            const frameY = h * 0.15;
+            ctx.fillStyle = '#473b30';
+            ctx.fillRect(frameX, frameY, 60, 80);
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(frameX + 4, frameY + 4, 52, 72);
+            // Art artwork inside frame
+            ctx.fillStyle = '#fb923c';
+            ctx.beginPath();
+            ctx.arc(frameX + 30, frameY + 35, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 4. Bookshelf (Upper Middle Right)
+            const shelfX = w * 0.65;
+            const shelfY = h * 0.22;
+            ctx.fillStyle = '#4a3525';
+            ctx.fillRect(shelfX, shelfY, 110, 10);
+            // Books on shelf
+            const bookColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b'];
+            bookColors.forEach((color, idx) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(shelfX + 10 + idx * 18, shelfY - 25, 14, 25);
+            });
+
+            // 5. Wooden Floor with Planks
+            const floorY = h * 0.68;
+            const floorGrad = ctx.createLinearGradient(0, floorY, 0, h);
+            floorGrad.addColorStop(0, '#362113');
+            floorGrad.addColorStop(1, '#20130a');
+            ctx.fillStyle = floorGrad;
+            ctx.fillRect(0, floorY, w, h - floorY);
+
+            // Floor Planks Lines
+            ctx.strokeStyle = '#27170c';
+            ctx.lineWidth = 2;
+            for (let y = floorY + 20; y < h; y += 25) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+                ctx.stroke();
+            }
+
+            // Skirting Board Line
+            ctx.fillStyle = '#4a2f1b';
+            ctx.fillRect(0, floorY - 6, w, 8);
+
+            // 6. Carpet / Rug under bed
+            const rugW = Math.min(w * 0.72, 580);
+            const rugH = Math.min(h * 0.22, 140);
+            const rugX = (w - rugW) / 2;
+            const rugY = h * 0.66;
+            ctx.fillStyle = '#0f766e';
+            ctx.beginPath();
+            ctx.ellipse(rugX + rugW / 2, rugY + rugH / 2, rugW / 2, rugH / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#14b8a6';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // 7. Nightstand & Warm Lamp (Left of bed)
+            const bedW = Math.min(w * 0.58, 460);
+            const bedH = Math.min(h * 0.38, 250);
+            const bedX = (w - bedW) / 2 + 20;
+            const bedY = h * 0.47;
+
+            const tableX = bedX - 75;
+            const tableY = bedY + 40;
+            // Table Base
+            ctx.fillStyle = '#543824';
+            ctx.fillRect(tableX, tableY, 60, bedH * 0.65);
+            ctx.fillStyle = '#3d281a';
+            ctx.fillRect(tableX - 5, tableY, 70, 8); // Top
+            // Drawer Handle
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(tableX + 30, tableY + 30, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Lamp Base & Shade
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(tableX + 26, tableY - 20, 8, 20); // Pole
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.moveTo(tableX + 12, tableY - 20);
+            ctx.lineTo(tableX + 48, tableY - 20);
+            ctx.lineTo(tableX + 42, tableY - 45);
+            ctx.lineTo(tableX + 18, tableY - 45);
+            ctx.closePath();
+            ctx.fill();
+
+            // Warm Ambient Lamp Light Glow
+            const lampGlow = ctx.createRadialGradient(tableX + 30, tableY - 30, 5, tableX + 30, tableY - 30, 140);
+            lampGlow.addColorStop(0, 'rgba(254, 240, 138, 0.35)');
+            lampGlow.addColorStop(1, 'rgba(254, 240, 138, 0)');
+            ctx.fillStyle = lampGlow;
+            ctx.beginPath();
+            ctx.arc(tableX + 30, tableY - 30, 140, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 8. Bed & Headboard
+            ctx.fillStyle = '#4a321f'; // Wooden Headboard
+            ctx.beginPath();
+            ctx.roundRect(bedX - 10, bedY - 35, bedW + 20, bedH, 14);
+            ctx.fill();
+
+            // --- TAABAN SIGN OVER THE BED ---
+            const signW = Math.min(bedW * 0.55, 240);
+            const signH = 42;
+            const signX = bedX + (bedW - signW) / 2;
+            const signY = bedY - 95; // Positioned right above the headboard
+
+            // Hanging chains/ropes
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(signX + 25, signY);
+            ctx.lineTo(signX + 25, signY - 20);
+            ctx.moveTo(signX + signW - 25, signY);
+            ctx.lineTo(signX + signW - 25, signY - 20);
+            ctx.stroke();
+
+            // Sign Backing Glow
+            ctx.shadowColor = 'rgba(251, 191, 36, 0.4)';
+            ctx.shadowBlur = 15;
+
+            // Wooden Board Base
+            ctx.fillStyle = '#3e2415';
+            ctx.beginPath();
+            ctx.roundRect(signX, signY, signW, signH, 10);
+            ctx.fill();
+            ctx.shadowBlur = 0; // Reset shadow
+
+            // Wooden Board Border Accent
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Inner Plaque Inset
+            ctx.fillStyle = '#28170c';
+            ctx.beginPath();
+            ctx.roundRect(signX + 4, signY + 4, signW - 8, signH - 8, 6);
+            ctx.fill();
+
+            // "TAABAN" Text
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 22px "Fredoka One", cursive';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(253, 224, 71, 0.6)';
+            ctx.shadowBlur = 8;
+            ctx.fillText('TAABAN', signX + signW / 2, signY + signH / 2 + 1);
+            ctx.shadowBlur = 0; // Reset text shadow
+            ctx.textAlign = 'left'; // Reset alignment default
+
+            // Bed Base / Frame
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.roundRect(bedX, bedY, bedW, bedH, 16);
+            ctx.fill();
+
+            // Pillows (Two Plush Pillows)
+            const pillowW = bedW * 0.38;
+            const pillowH = bedH * 0.28;
+            const pillowY = bedY + 12;
+
+            // Back Pillow Shadow
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.roundRect(bedX + 20, pillowY, pillowW, pillowH, 10);
+            ctx.roundRect(bedX + bedW - pillowW - 20, pillowY, pillowW, pillowH, 10);
+            ctx.fill();
+
+            // Front Main Pillow
+            const headX = bedX + bedW / 2;
+            const headY = pillowY + pillowH / 2 + 5;
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.roundRect(headX - pillowW / 2, pillowY + 5, pillowW, pillowH, 10);
+            ctx.fill();
+
+            // 9. THE TIRED MAN ("TAABAN")
+            // Head
+            ctx.fillStyle = '#ffdbac';
+            ctx.beginPath();
+            ctx.arc(headX, headY, 28, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair
+            ctx.fillStyle = '#3f2305';
+            ctx.beginPath();
+            ctx.arc(headX, headY - 8, 28, Math.PI * 0.9, Math.PI * 2.1);
+            ctx.fill();
+
+            if (gameState === 'GAMEOVER') {
+                // ANGRY / AWAKE MAN (Covering head or awake with red stressed eyes)
+                ctx.strokeStyle = '#dc2626';
+                ctx.lineWidth = 3.5;
+                // Wide open stressed eyes
+                ctx.beginPath();
+                ctx.arc(headX - 10, headY, 5, 0, Math.PI * 2);
+                ctx.arc(headX + 10, headY, 5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Open screaming mouth
+                ctx.fillStyle = '#991b1b';
+                ctx.beginPath();
+                ctx.arc(headX, headY + 14, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Hands covering ears
+                ctx.fillStyle = '#ffdbac';
+                ctx.beginPath();
+                ctx.arc(headX - 32, headY, 12, 0, Math.PI * 2);
+                ctx.arc(headX + 32, headY, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else {
+                // SLEEPING MAN (Peaceful closed eyes)
+                ctx.strokeStyle = '#1e293b';
+                ctx.lineWidth = 3;
+                // Left Sleeping Eye (Arc)
+                ctx.beginPath();
+                ctx.arc(headX - 10, headY + 2, 6, 0.1 * Math.PI, 0.9 * Math.PI);
+                ctx.stroke();
+                // Right Sleeping Eye
+                ctx.beginPath();
+                ctx.arc(headX + 10, headY + 2, 6, 0.1 * Math.PI, 0.9 * Math.PI);
+                ctx.stroke();
+
+                // Small relaxed mouth
+                ctx.beginPath();
+                ctx.arc(headX, headY + 14, 3, 0, Math.PI);
+                ctx.stroke();
+
+                // Spawn Zzz Particles if peaceful or playing
+                createZzz(headX + 18, headY - 20);
+            }
+
+            // Cozy Blanket with Folds & Pattern
+            const blanketY = bedY + bedH * 0.38;
+            const blanketGrad = ctx.createLinearGradient(bedX, blanketY, bedX, bedY + bedH);
+            blanketGrad.addColorStop(0, '#2563eb');
+            blanketGrad.addColorStop(1, '#1d4ed8');
+            ctx.fillStyle = blanketGrad;
+            ctx.beginPath();
+            ctx.roundRect(bedX, blanketY, bedW, bedH * 0.62, [0, 0, 16, 16]);
+            ctx.fill();
+
+            // Blanket Fold Top Edge Detail
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.roundRect(bedX, blanketY, bedW, 16, 6);
+            ctx.fill();
+
+            // Blanket Pattern Stripes
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 4;
+            for (let bx = bedX + 25; bx < bedX + bedW; bx += 35) {
+                ctx.beginPath();
+                ctx.moveTo(bx, blanketY + 16);
+                ctx.lineTo(bx - 15, bedY + bedH);
+                ctx.stroke();
+            }
+        }
+
+        // --- LEVEL INITIALIZATION ---
+        function startLevel(lvl) {
+            currentLevel = lvl;
+            const config = getLevelConfig(lvl);
+            timeRemaining = config.time;
+            maxLevelTime = config.time;
+            alarmsToSilence = config.count;
+            alarmsSilenced = 0;
+            alarmsList = [];
+            particles = [];
+
+            // UI updates
+            document.getElementById('hud-level').innerText = `Level ${currentLevel}`;
+            document.getElementById('hud-alarms').innerText = `${alarmsSilenced} / ${alarmsToSilence}`;
+            document.getElementById('timer-text').innerText = `${timeRemaining.toFixed(1)}s`;
+            document.getElementById('timer-bar').style.width = '100%';
+
+            // Generate alarms dynamically avoiding central head area
+            const w = canvas.width;
+            const h = canvas.height;
+            const radius = Math.min(w, h) * 0.045 + 12; // Responsive clock size
+
+            for (let i = 0; i < alarmsToSilence; i++) {
+                let x, y, safe = false;
+                let attempts = 0;
+
+                while (!safe && attempts < 100) {
+                    attempts++;
+                    // Spawn anywhere in bedroom visible bounds
+                    x = w * 0.12 + Math.random() * (w * 0.76);
+                    y = h * 0.18 + Math.random() * (h * 0.65);
+
+                    // Prevent overlapping the sleeper's pillow head closely
+                    const distToHead = Math.hypot(x - w / 2, y - h * 0.52);
+                    if (distToHead > 100) {
+                        safe = true;
+                    }
+                }
+
+                let vx = 0, vy = 0;
+                if (config.isMoving) {
+                    const angle = Math.random() * Math.PI * 2;
+                    vx = Math.cos(angle) * config.speed;
+                    vy = Math.sin(angle) * config.speed;
+                }
+
+                alarmsList.push(new AlarmClock(x, y, radius, vx, vy));
+            }
+
+            gameState = 'PLAYING';
+            sounds.startAlarmSound();
+        }
+
+        // --- INPUT HANDLING (Click & Touch) ---
+        function handleInteraction(clientX, clientY) {
+            if (gameState !== 'PLAYING') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const px = clientX - rect.left;
+            const py = clientY - rect.top;
+
+            // Check if player clicked any active alarm
+            for (let i = alarmsList.length - 1; i >= 0; i--) {
+                const alarm = alarmsList[i];
+                if (alarm.ringing && alarm.isClicked(px, py)) {
+                    alarm.ringing = false;
+                    alarmsSilenced++;
+                    sounds.playClick();
+                    createSparks(alarm.x, alarm.y, alarm.color);
+
+                    // Remove alarm from list
+                    alarmsList.splice(i, 1);
+
+                    // Update HUD
+                    document.getElementById('hud-alarms').innerText = `${alarmsSilenced} / ${alarmsToSilence}`;
+
+                    // Check level win condition
+                    if (alarmsSilenced >= alarmsToSilence) {
+                        triggerVictory();
+                    }
+                    break;
+                }
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => handleInteraction(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        // --- GAME END STATES ---
+        function triggerVictory() {
+            gameState = 'VICTORY';
+            sounds.stopAlarmSound();
+            sounds.playVictory();
+
+            document.getElementById('vic-level-num').innerText = currentLevel;
+            document.getElementById('vic-time-bonus').innerText = `${timeRemaining.toFixed(1)}s`;
+            document.getElementById('victory-overlay').classList.remove('hidden');
+        }
+
+        function triggerGameOver() {
+            gameState = 'GAMEOVER';
+            sounds.stopAlarmSound();
+            sounds.playGameOver();
+
+            document.getElementById('go-level-num').innerText = `Level ${currentLevel}`;
+            document.getElementById('gameover-overlay').classList.remove('hidden');
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop(timestamp) {
+            if (!lastFrameTime) lastFrameTime = timestamp;
+            const dt = (timestamp - lastFrameTime) / 1000;
+            lastFrameTime = timestamp;
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Environment & Man
+            drawBedroom();
+
+            // Update & Render Game Logic if PLAYING
+            if (gameState === 'PLAYING') {
+                // Countdown Timer
+                timeRemaining -= dt;
+                if (timeRemaining <= 0) {
+                    timeRemaining = 0;
+                    triggerGameOver();
+                }
+
+                // Update Timer Bar UI
+                const timePercent = (timeRemaining / maxLevelTime) * 100;
+                document.getElementById('timer-bar').style.width = `${Math.max(0, timePercent)}%`;
+                document.getElementById('timer-text').innerText = `${timeRemaining.toFixed(1)}s`;
+
+                // Update & Render Alarms
+                alarmsList.forEach(alarm => {
+                    alarm.update(canvas.width, canvas.height);
+                    alarm.draw(ctx);
+                });
+            }
+
+            // Render Particles (Sparks on clock smash)
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.life;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Render Zzz Floating Particles
+            for (let i = zzzParticles.length - 1; i >= 0; i--) {
+                const z = zzzParticles[i];
+                z.y += z.vy;
+                z.x += z.vx;
+                z.alpha -= 0.008;
+                if (z.alpha <= 0) {
+                    zzzParticles.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.globalAlpha = z.alpha;
+                ctx.fillStyle = '#67e8f9';
+                ctx.font = `bold ${z.size}px Fredoka One`;
+                ctx.fillText('Z', z.x, z.y);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- BUTTON EVENT LISTENERS ---
+        document.getElementById('start-btn').addEventListener('click', () => {
+            sounds.init();
+            document.getElementById('menu-overlay').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('timer-container').classList.remove('hidden');
+            startLevel(1);
+        });
+
+        document.getElementById('next-level-btn').addEventListener('click', () => {
+            document.getElementById('victory-overlay').classList.add('hidden');
+            startLevel(currentLevel + 1);
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('gameover-overlay').classList.add('hidden');
+            startLevel(1);
+        });
+
+        document.getElementById('mute-btn').addEventListener('click', () => {
+            sounds.muted = !sounds.muted;
+            const icon = document.getElementById('mute-icon');
+            if (sounds.muted) {
+                icon.className = 'fa-solid fa-volume-xmark text-red-400';
+                sounds.stopAlarmSound();
+            } else {
+                icon.className = 'fa-solid fa-volume-high text-white';
+                if (gameState === 'PLAYING') sounds.startAlarmSound();
+            }
+        });
+
+        // Initialize Loop on load
+        window.onload = () => {
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
